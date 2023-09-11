@@ -1,0 +1,42 @@
+images:
+- location: "https://cloud-images.ubuntu.com/releases/23.04/release-20230810/ubuntu-23.04-server-cloudimg-amd64.img"
+  arch: "x86_64"
+  digest: "sha256:5ad255d32a30a2cda9f0df19f0a6ce8d6f3c81b63845086a4cb5c43cf97fcb92"
+- location: "https://cloud-images.ubuntu.com/releases/23.04/release-20230810/ubuntu-23.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+  digest: "sha256:af62ca6ba307388f7e0a8ad1c46103e6aea0130a09122e818df8d711637bf998"
+# Fallback to the latest release image.
+# Hint: run `limactl prune` to invalidate the cache
+- location: "https://cloud-images.ubuntu.com/releases/23.04/release/ubuntu-23.04-server-cloudimg-amd64.img"
+  arch: "x86_64"
+- location: "https://cloud-images.ubuntu.com/releases/23.04/release/ubuntu-23.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+
+memory: "2GiB"
+cpus: 2
+disk: "30GiB"
+ssh:
+  # Specifying a value ensures same port bindings after restarts
+  # Forwarded to port 22 of the guest.
+  localPort: 2222
+# Necessary deps: Python 3, bpfcc, tools package.
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt update && apt-get install -y build-essential vim pkg-config libssl-dev python3 bpfcc-tools strace bpftool linux-headers-$(uname -r)
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      sudo cp /home/$(whoami).linux/.ssh/authorized_keys /root/.ssh/authorized_keys
+mounts:
+- location: "~"
