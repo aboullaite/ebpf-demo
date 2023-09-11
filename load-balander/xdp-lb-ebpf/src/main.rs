@@ -25,7 +25,7 @@ const CLIENT: u32 = 4;
 const LB: u32 = 5;
 
 #[xdp]
-pub fn demo(ctx: XdpContext) -> u32 {
+pub fn xdp_lb(ctx: XdpContext) -> u32 {
     match lb(ctx) {
         Ok(ret) => ret,
         Err(_) => xdp_action::XDP_ABORTED,
