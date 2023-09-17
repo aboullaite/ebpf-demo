@@ -8,10 +8,10 @@ use aya_bpf::{
     macros::{map, xdp},
     maps::HashMap,
     programs::XdpContext,
-    helpers::{bpf_csum_diff, bpf_l3_csum_replace},
+    helpers::{bpf_csum_diff, bpf_skb_store_bytes},
 };
+use xdp_lb_common:Registry
 use aya_log_ebpf::info;
-
 use core::{mem, ptr};
 use network_types::{
     eth::{EthHdr, EtherType},
@@ -20,11 +20,13 @@ use network_types::{
 };
 
 // hardcoded container IP values. This assumes that IP addresses are in the form 172.17.0.x
-const BACKEND_A: u32 = 2;
-const BACKEND_B: u32 = 3;
 const CLIENT: u32 = 5;
 const LB: u32 = 4;
 
+#[map] 
+static BACKENDS: HashMap<String, Registry> =
+    HashMap::<String, Registry>::with_max_entries(10, 0);
+   
 #[xdp]
 pub fn xdp_lb(ctx: XdpContext) -> u32 {
     match lb(ctx) {
@@ -44,21 +46,38 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
     let ipv4hdr: *mut Ipv4Hdr = unsafe { ptr_at_mut(&ctx, EthHdr::LEN).ok_or(xdp_action::XDP_ABORTED)? };
 
     let tcphdr: *mut TcpHdr = unsafe {ptr_at_mut(&ctx, EthHdr::LEN + Ipv4Hdr::LEN).ok_or(xdp_action::XDP_PASS)?};
-    let source = u32::from_be(unsafe { (*ipv4hdr).src_addr });
-    let dest = u32::from_be(unsafe { (*ipv4hdr).dst_addr });
+    let source = unsafe { (*ipv4hdr).src_addr };
+    let dest = unsafe { (*ipv4hdr).dst_addr };
     let check = unsafe { (*ipv4hdr).check };
-    info!(&ctx, "checksum initial {}, source {}, destination {}", check, source, dest);
+
+    // Extract backend logic
+    let backends = match unsafe { BACKENDS.get("BACKENDS") } {
+        Some(backends) => {backends}
+        None => {
+            info!(&ctx, "NO backends found");
+            return Ok(xdp_action::XDP_PASS);
+        }
+    };
+    if backends.index > backends.ips.len() - 1 {
+        info!(&ctx, "Backend list is empty!");
+        return Ok(xdp_action::XDP_PASS);
+    }
+    // get random ip
+    let new_dest = backends[rand::thread_rng().gen_range(0..backends.len())];
+
     if(source ==  ip_address(CLIENT)){
-        unsafe { (*ipv4hdr).dst_addr = ip_address2(BACKEND_A) };
-        unsafe { (*ethhdr).dst_addr[5]=BACKEND_A as u8 };
+        unsafe { (*ipv4hdr).dst_addr = ip_address(new_dest) };
+        unsafe { (*ethhdr).dst_addr[5]= new_dest as u8 };
 
     } else {
-        unsafe { (*ipv4hdr).dst_addr = ip_address2(CLIENT) };
+        unsafe { (*ipv4hdr).dst_addr = ip_address(CLIENT) };
         unsafe { (*ethhdr).dst_addr[5]= CLIENT as u8 };
     }
 
-        unsafe { (*ipv4hdr).src_addr = ip_address2(LB) };
+        unsafe { (*ipv4hdr).src_addr = ip_address(LB) };
         unsafe { (*ethhdr).src_addr[5]= LB as u8 };
+        unsafe { (*tcphdr).source = (*tcphdr).dest };
+
 
         unsafe { (*ipv4hdr).check = 0 };
         let full_cksum = unsafe {
@@ -75,15 +94,15 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
         let source = u32::from_be(unsafe { (*ipv4hdr).src_addr });
         let dest = u32::from_be(unsafe { (*ipv4hdr).dst_addr });
         let check = unsafe { (*ipv4hdr).check };
-        let eth = unsafe { (*ethhdr).dst_addr};
 
-        info!(&ctx, "checksum final {}, source {}, destination {}", check, source, dest);
+        let eth: *mut EthHdr = unsafe { ptr_at_mut(&ctx, 0).ok_or(xdp_action::XDP_ABORTED)? };
+        let debug =  unsafe { (*eth).dst_addr[5] };
+        info!(&ctx, "checksum final {}, source {}, destination {}", check, source, debug);
 
         Ok(xdp_action::XDP_TX)
 }
 
 #[panic_handler]
-
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }
 }
@@ -108,12 +127,12 @@ fn ptr_at_mut<T>(ctx: &XdpContext, offset: usize) -> Option<*mut T> {
     let ptr = ptr_at::<T>(ctx, offset)?;
     Some(ptr as *mut T)
 }
+// #[inline(always)]
+// fn ip_address(x: u32) -> u32{
+//     return u32::from_be((x<<24)+(0<<16)+(17<<8)+172);
+// }
 #[inline(always)]
 fn ip_address(x: u32) -> u32{
-    return u32::from_be((x<<24)+(0<<16)+(17<<8)+172);
-}
-
-fn ip_address2(x: u32) -> u32{
     return (x<<24)+(0<<16)+(17<<8)+172;
 }
 

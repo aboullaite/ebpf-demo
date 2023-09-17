@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 aya = { git = "https://github.com/aya-rs/aya", features = ["async_tokio"] }
+aya-bpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
 aya-log = { git = "https://github.com/aya-rs/aya" }
 clap = { version = "4.1", features = ["derive"] }
 xdp-lb-common = { path = "../xdp-lb-common", features = ["user"] }

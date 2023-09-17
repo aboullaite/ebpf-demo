@@ -5,6 +5,8 @@ use aya_log::BpfLogger;
 use clap::Parser;
 use log::{info, warn, debug};
 use tokio::signal;
+use aya::maps::HashMap;
+use xdp_lb_common:Registry
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -50,6 +52,14 @@ async fn main() -> Result<(), anyhow::Error> {
     program.attach(&opt.iface, XdpFlags::default())
         .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
 
+    let mut backends: HashMap<_, String, Registry> =
+    HashMap::try_from(bpf.map_mut("BACKENDS")?)?;
+    let mut ips: [u32; 4] = [0; 4]; 
+    ips[0]= 2;   
+    ips[1]= 3;   
+    
+    let backend_ips = Registry { ips };
+    backends.insert(9875, backend_ips, 0)?;
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;
     info!("Exiting...");

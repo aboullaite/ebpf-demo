@@ -30,3 +30,16 @@ This should link the eBPF program
 ## IP addresses
 The IP addresses for the client, load balancer and two backends are hard-coded at the top of the .c file. You'll likely need to change these to match the addresses assigned to the containers you run.
 
+### Debugging
+docker run --privileged --rm -t --pid=host -v /sys/kernel/debug/:/sys/kernel/debug/ cilium/pwru pwru --output-tuple 'host 172.17.0.4 and tcp'
+
+
+    1  wget https://apt.llvm.org/llvm.sh
+    2  chmod +x llvm.sh
+    3  sudo ./llvm.sh 16
+    4  apt install lsb-release wget software-properties-common gnupg
+    5  sudo ./llvm.sh 16
+    6  apt install libpolly-16-dev
+    7  cd xdp-lb/
+    8  cargo install bpf-linker --no-default-features
+    9  RUST_LOG=info cargo xtask run
