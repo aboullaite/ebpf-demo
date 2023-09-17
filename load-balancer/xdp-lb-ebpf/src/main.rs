@@ -10,7 +10,7 @@ use aya_bpf::{
     programs::XdpContext,
     helpers::{bpf_csum_diff, bpf_skb_store_bytes},
 };
-use xdp_lb_common:Registry
+use xdp_lb_common::Registry;
 use aya_log_ebpf::info;
 use core::{mem, ptr};
 use network_types::{
@@ -19,13 +19,17 @@ use network_types::{
     tcp::TcpHdr,
 };
 
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::RngCore;
+
 // hardcoded container IP values. This assumes that IP addresses are in the form 172.17.0.x
 const CLIENT: u32 = 5;
 const LB: u32 = 4;
 
 #[map] 
-static BACKENDS: HashMap<String, Registry> =
-    HashMap::<String, Registry>::with_max_entries(10, 0);
+static BACKENDS: HashMap<&str, Registry> =
+    HashMap::<&str, Registry>::with_max_entries(10, 0);
    
 #[xdp]
 pub fn xdp_lb(ctx: XdpContext) -> u32 {
@@ -46,9 +50,9 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
     let ipv4hdr: *mut Ipv4Hdr = unsafe { ptr_at_mut(&ctx, EthHdr::LEN).ok_or(xdp_action::XDP_ABORTED)? };
 
     let tcphdr: *mut TcpHdr = unsafe {ptr_at_mut(&ctx, EthHdr::LEN + Ipv4Hdr::LEN).ok_or(xdp_action::XDP_PASS)?};
-    let source = unsafe { (*ipv4hdr).src_addr };
-    let dest = unsafe { (*ipv4hdr).dst_addr };
-    let check = unsafe { (*ipv4hdr).check };
+    let source = unsafe { (*ipv4hdr).src_addr.to_be() };
+    let dest = unsafe { (*ipv4hdr).dst_addr.to_be() };
+    let check = unsafe { (*ipv4hdr).check.to_be() };
 
     // Extract backend logic
     let backends = match unsafe { BACKENDS.get("BACKENDS") } {
@@ -63,7 +67,8 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
         return Ok(xdp_action::XDP_PASS);
     }
     // get random ip
-    let new_dest = backends[rand::thread_rng().gen_range(0..backends.len())];
+    let mut small_rng = SmallRng::seed_from_u64(backends.len());
+    let new_dest = backends[small_rng.next_u64() as u32];
 
     if(source ==  ip_address(CLIENT)){
         unsafe { (*ipv4hdr).dst_addr = ip_address(new_dest) };

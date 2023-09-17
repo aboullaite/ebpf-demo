@@ -52,7 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
     program.attach(&opt.iface, XdpFlags::default())
         .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
 
-    let mut backends: HashMap<_, String, Registry> =
+    let mut backends: HashMap<_, &str, Registry> =
     HashMap::try_from(bpf.map_mut("BACKENDS")?)?;
     let mut ips: [u32; 4] = [0; 4]; 
     ips[0]= 2;   

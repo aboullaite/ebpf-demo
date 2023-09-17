@@ -8,7 +8,8 @@ aya-bpf = { git = "https://github.com/aya-rs/aya" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya" }
 xdp-lb-common = { path = "../xdp-lb-common" }
 network-types = "0.0.4"
-rand = "0.8.5"
+rand = { version = "0.8.5", features = ["small_rng"], default-features = false }
+
 [[bin]]
 name = "xdp-lb"
 path = "src/main.rs"
