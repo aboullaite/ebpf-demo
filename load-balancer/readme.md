@@ -21,25 +21,20 @@ docker run --rm -it -h client --name client --env TERM=xterm-color ubuntu
 ```
 
 Exec into one of the backends and install tcpdump with `apk add tcpdump` if you want to see incoming traffic there.
+Get the IP addresses of backends and add it in the backends array in `xdp-lb/srx/main.rs`. You need only to add the last bit of the IP address.
+
 Exec into the load balencer and run:
 ```
 cd /xdp-lb
 $ RUST_LOG=info cargo xtask run
 ```
 This should link the eBPF program
+
 ## IP addresses
-The IP addresses for the client, load balancer and two backends are hard-coded at the top of the .c file. You'll likely need to change these to match the addresses assigned to the containers you run.
+The IP addresses for the client, load balancer are hardcoded in `xdp-lb-ebpf/srx/main.rs`. You'll likely need to change these to match the addresses assigned to the containers you run.
 
 ### Debugging
+Debugging traffic is hard. [pwru](https://github.com/cilium/pwru) is a nice tool for tracing network packets in the Linux kernel with advanced filtering capabilities.
+```
 docker run --privileged --rm -t --pid=host -v /sys/kernel/debug/:/sys/kernel/debug/ cilium/pwru pwru --output-tuple 'host 172.17.0.4 and tcp'
-
-
-    1  wget https://apt.llvm.org/llvm.sh
-    2  chmod +x llvm.sh
-    3  sudo ./llvm.sh 16
-    4  apt install lsb-release wget software-properties-common gnupg
-    5  sudo ./llvm.sh 16
-    6  apt install libpolly-16-dev
-    7  cd xdp-lb/
-    8  cargo install bpf-linker --no-default-features
-    9  RUST_LOG=info cargo xtask run
+```

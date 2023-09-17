@@ -6,30 +6,25 @@
 use aya_bpf::{
     bindings::xdp_action,
     macros::{map, xdp},
-    maps::HashMap,
+    maps::Array,
     programs::XdpContext,
-    helpers::{bpf_csum_diff, bpf_skb_store_bytes},
+    helpers::{bpf_csum_diff, bpf_ktime_get_ns},
 };
-use xdp_lb_common::Registry;
+
 use aya_log_ebpf::info;
-use core::{mem, ptr};
+use core::{mem};
 use network_types::{
     eth::{EthHdr, EtherType},
     ip::Ipv4Hdr,
     tcp::TcpHdr,
 };
 
-use rand::{Rng, SeedableRng};
-use rand::rngs::SmallRng;
-use rand::RngCore;
-
 // hardcoded container IP values. This assumes that IP addresses are in the form 172.17.0.x
 const CLIENT: u32 = 5;
 const LB: u32 = 4;
 
 #[map] 
-static BACKENDS: HashMap<&str, Registry> =
-    HashMap::<&str, Registry>::with_max_entries(10, 0);
+static BACKENDS: Array<u32> = Array::<u32>::with_max_entries(10, 0);
    
 #[xdp]
 pub fn xdp_lb(ctx: XdpContext) -> u32 {
@@ -51,28 +46,24 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
 
     let tcphdr: *mut TcpHdr = unsafe {ptr_at_mut(&ctx, EthHdr::LEN + Ipv4Hdr::LEN).ok_or(xdp_action::XDP_PASS)?};
     let source = unsafe { (*ipv4hdr).src_addr.to_be() };
-    let dest = unsafe { (*ipv4hdr).dst_addr.to_be() };
-    let check = unsafe { (*ipv4hdr).check.to_be() };
+
+    // get random ip
+    let random = unsafe { (bpf_ktime_get_ns() as u32) % 2};
 
     // Extract backend logic
-    let backends = match unsafe { BACKENDS.get("BACKENDS") } {
-        Some(backends) => {backends}
+    let backend = match BACKENDS.get(random) {
+        Some(backend) => { *backend }
         None => {
-            info!(&ctx, "NO backends found");
+            info!(&ctx, "No backends found!");
             return Ok(xdp_action::XDP_PASS);
         }
     };
-    if backends.index > backends.ips.len() - 1 {
-        info!(&ctx, "Backend list is empty!");
-        return Ok(xdp_action::XDP_PASS);
-    }
-    // get random ip
-    let mut small_rng = SmallRng::seed_from_u64(backends.len());
-    let new_dest = backends[small_rng.next_u64() as u32];
 
-    if(source ==  ip_address(CLIENT)){
-        unsafe { (*ipv4hdr).dst_addr = ip_address(new_dest) };
-        unsafe { (*ethhdr).dst_addr[5]= new_dest as u8 };
+    info!(&ctx, "Forwarding request to IP 172.17.0.{}", backend);
+
+    if source ==  ip_address(CLIENT) {
+        unsafe { (*ipv4hdr).dst_addr = ip_address(backend) };
+        unsafe { (*ethhdr).dst_addr[5]= backend as u8 };
 
     } else {
         unsafe { (*ipv4hdr).dst_addr = ip_address(CLIENT) };
@@ -96,13 +87,13 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
         } as u64;
         unsafe { (*ipv4hdr).check = csum_fold_helper(full_cksum) };
         unsafe { (*tcphdr).check = 0 };
+        
+        // Debugging info
         let source = u32::from_be(unsafe { (*ipv4hdr).src_addr });
         let dest = u32::from_be(unsafe { (*ipv4hdr).dst_addr });
         let check = unsafe { (*ipv4hdr).check };
 
-        let eth: *mut EthHdr = unsafe { ptr_at_mut(&ctx, 0).ok_or(xdp_action::XDP_ABORTED)? };
-        let debug =  unsafe { (*eth).dst_addr[5] };
-        info!(&ctx, "checksum final {}, source {}, destination {}", check, source, debug);
+        info!(&ctx, "checksum final {}, source {}, destination {}", check, source, dest);
 
         Ok(xdp_action::XDP_TX)
 }
