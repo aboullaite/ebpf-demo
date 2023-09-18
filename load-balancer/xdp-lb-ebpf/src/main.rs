@@ -20,8 +20,8 @@ use network_types::{
 };
 
 // hardcoded container IP values. This assumes that IP addresses are in the form 172.17.0.x
-const CLIENT: u32 = 5;
-const LB: u32 = 4;
+const CLIENT: u8 = 5;
+const LB: u8 = 4;
 
 #[map] 
 static BACKENDS: Array<u32> = Array::<u32>::with_max_entries(10, 0);
@@ -37,18 +37,21 @@ pub fn xdp_lb(ctx: XdpContext) -> u32 {
 fn lb(ctx: XdpContext) -> Result<u32, u32> {
     info!(&ctx, "received a packet");
     
-    let ethhdr: *mut EthHdr = unsafe { ptr_at_mut(&ctx, 0).ok_or(xdp_action::XDP_ABORTED)? };
-    match unsafe { (*ethhdr).ether_type } {
+    unsafe {
+    let ethhdr: *mut EthHdr = ptr_at_mut(&ctx, 0).ok_or(xdp_action::XDP_ABORTED)?;
+    match (*ethhdr).ether_type  {
         EtherType::Ipv4 => {}
         _ => return Ok(xdp_action::XDP_PASS),
     }
-    let ipv4hdr: *mut Ipv4Hdr = unsafe { ptr_at_mut(&ctx, EthHdr::LEN).ok_or(xdp_action::XDP_ABORTED)? };
+    let ipv4hdr: *mut Ipv4Hdr = ptr_at_mut(&ctx, EthHdr::LEN).ok_or(xdp_action::XDP_ABORTED)?;
 
-    let tcphdr: *mut TcpHdr = unsafe {ptr_at_mut(&ctx, EthHdr::LEN + Ipv4Hdr::LEN).ok_or(xdp_action::XDP_PASS)?};
-    let source = unsafe { (*ipv4hdr).src_addr.to_be() };
-
+    let tcphdr: *mut TcpHdr = ptr_at_mut(&ctx, EthHdr::LEN + Ipv4Hdr::LEN).ok_or(xdp_action::XDP_PASS)?;
+    let source = (*ipv4hdr).src_addr ;
+    let dest = (*ipv4hdr).dst_addr ;
+    let initial_csum = (*ipv4hdr).check ;
+    info!(&ctx, "Request coming from {} to {}, checksum {}", source, dest, initial_csum);
     // get random ip
-    let random = unsafe { (bpf_ktime_get_ns() as u32) % 2};
+    let random = (bpf_ktime_get_ns() as u32) % 2;
 
     // Extract backend logic
     let backend = match BACKENDS.get(random) {
@@ -62,39 +65,32 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
     info!(&ctx, "Forwarding request to IP 172.17.0.{}", backend);
 
     if source ==  ip_address(CLIENT) {
-        unsafe { (*ipv4hdr).dst_addr = ip_address(backend) };
-        unsafe { (*ethhdr).dst_addr[5]= backend as u8 };
+        info!(&ctx, "Got request from client");
+        (*ethhdr).dst_addr[5]= backend as u8;
+        (*ipv4hdr).dst_addr = ip_address(backend as u8) ;
 
     } else {
-        unsafe { (*ipv4hdr).dst_addr = ip_address(CLIENT) };
-        unsafe { (*ethhdr).dst_addr[5]= CLIENT as u8 };
+        info!(&ctx, "Got request not from client");
+        (*ethhdr).dst_addr[5]= CLIENT;
+        (*ipv4hdr).dst_addr = ip_address(CLIENT);
     }
+        (*ethhdr).src_addr[5]= LB;
+        (*ipv4hdr).src_addr = ip_address(LB) ;
+        
+        // unsafe { (*tcphdr).source = (*tcphdr).dest };
 
-        unsafe { (*ipv4hdr).src_addr = ip_address(LB) };
-        unsafe { (*ethhdr).src_addr[5]= LB as u8 };
-        unsafe { (*tcphdr).source = (*tcphdr).dest };
-
-
-        unsafe { (*ipv4hdr).check = 0 };
-        let full_cksum = unsafe {
-            bpf_csum_diff(
-                mem::MaybeUninit::zeroed().assume_init(),
-                0,
-                ipv4hdr as *mut u32,
-                mem::size_of::<Ipv4Hdr>() as u32,
-                0,
-            )
-        } as u64;
-        unsafe { (*ipv4hdr).check = csum_fold_helper(full_cksum) };
-        unsafe { (*tcphdr).check = 0 };
+        let csum = !((*ipv4hdr).check as u32);
+        let csum = bpf_csum_diff(&source as *const u32 as *mut u32, 4, &(*ipv4hdr).src_addr as *const u32 as *mut u32, 4, csum) as u32;
+        let csum = bpf_csum_diff(&dest as *const u32 as *mut u32, 4, &(*ipv4hdr).dst_addr as *const u32 as *mut u32, 4, csum) as u32;
+        unsafe { (*ipv4hdr).check = csum_fold(csum) } ;
         
         // Debugging info
-        let source = u32::from_be(unsafe { (*ipv4hdr).src_addr });
-        let dest = u32::from_be(unsafe { (*ipv4hdr).dst_addr });
+        let source = unsafe { (*ipv4hdr).src_addr };
+        let dest = unsafe { (*ipv4hdr).dst_addr };
         let check = unsafe { (*ipv4hdr).check };
 
-        info!(&ctx, "checksum final {}, source {}, destination {}", check, source, dest);
-
+        info!(&ctx, "final checksum {}, source {}, destination {}", check, source, dest);
+    }
         Ok(xdp_action::XDP_TX)
 }
 
@@ -118,27 +114,17 @@ fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Option<*const T> {
 
 #[inline(always)]
 fn ptr_at_mut<T>(ctx: &XdpContext, offset: usize) -> Option<*mut T> {
-    info!(ctx, "PArsing ...", );
-
     let ptr = ptr_at::<T>(ctx, offset)?;
     Some(ptr as *mut T)
 }
-// #[inline(always)]
-// fn ip_address(x: u32) -> u32{
-//     return u32::from_be((x<<24)+(0<<16)+(17<<8)+172);
-// }
-#[inline(always)]
-fn ip_address(x: u32) -> u32{
-    return (x<<24)+(0<<16)+(17<<8)+172;
+
+fn ip_address(x: u8) -> u32 {
+    u32::from_be_bytes([172, 17, 0, x]).to_be()
 }
 
-// Converts a checksum into u16
 #[inline(always)]
-pub fn csum_fold_helper(mut csum: u64) -> u16 {
-    for _i in 0..4 {
-        if (csum >> 16) > 0 {
-            csum = (csum & 0xffff) + (csum >> 16);
-        }
-    }
-    return !(csum as u16);
+fn csum_fold(mut csum: u32) -> u16 {
+    csum = (csum & 0xffff) + (csum >> 16);
+    csum = !((csum & 0xffff) + (csum >> 16));
+    csum as u16
 }
