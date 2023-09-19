@@ -10,7 +10,7 @@ docker buildx build --push --platform linux/arm64,linux/amd64 --tag aboullaite/x
 ```
 Running it as privileged gives it permissions to load eBPF programs:
 ```
-docker run --rm -it -v $(pwd)/xdp-lb:/xdp-lb --privileged -h lb --name lb --env TERM=xterm-color aboullaite/xdp-lb
+docker run --rm -it -v $(pwd)/load-balancer:/xdp-lb --privileged -h lb --name lb --env TERM=xterm-color aboullaite/xdp-lb
 ```
 ## Demo containers
 Here's how I started the containers for the two backends and the client:
@@ -34,7 +34,8 @@ This should link the eBPF program
 The IP addresses for the client, load balancer are hardcoded in `xdp-lb-ebpf/srx/main.rs`. You'll likely need to change these to match the addresses assigned to the containers you run.
 
 ### Debugging
-Debugging traffic is hard. [pwru](https://github.com/cilium/pwru) is a nice tool for tracing network packets in the Linux kernel with advanced filtering capabilities.
+Debugging ebpf traffic is hard. [pwru](https://github.com/cilium/pwru) is a nice tool for tracing network packets in the Linux kernel with advanced filtering capabilities.
+
 ```
 docker run --privileged --rm -t --pid=host -v /sys/kernel/debug/:/sys/kernel/debug/ cilium/pwru pwru --output-tuple 'host 172.17.0.4 and tcp'
 ```
