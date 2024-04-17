@@ -53,8 +53,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     
     let mut backends = Array::try_from(bpf.map_mut("BACKENDS").unwrap())?;
-    backends.set(0, 2, 0)?;
-    backends.set(1, 3, 0)?;  
+    backends.set(0, 6, 0)?;
+    backends.set(1, 7, 0)?;  
     
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;

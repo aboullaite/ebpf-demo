@@ -3,7 +3,7 @@ from bcc import BPF
 
 program = r"""
 int hello(void *ctx) {
-    bpf_trace_printk("Hello Devoxx! I am an eBPF program!");
+    bpf_trace_printk("Salut Devoxx! Je suis un programme ebpf");
     return 0;
 }
 """

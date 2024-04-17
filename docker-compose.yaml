@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  backendA:
+    image: nginxdemos/hello:plain-text
+    networks:
+      - oh-network
+
+  backendB:
+    image: nginxdemos/hello:plain-text
+    networks:
+      - oh-network
+
+  client:
+    image: ubuntu
+    networks:
+      - oh-network
+    command: tail -F anything
+
+  xdp-lb:
+    image: aboullaite/xdp-lb
+    privileged: true
+    volumes:
+      - ./load-balancer/:/xdp-lb
+    networks:
+      - oh-network
+    command: tail -F anything
+
+networks:
+  oh-network:
+    driver: overlay
+    attachable: true

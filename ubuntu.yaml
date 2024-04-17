@@ -32,7 +32,7 @@ provision:
       #!/bin/bash
       set -eux -o pipefail
       export DEBIAN_FRONTEND=noninteractive
-      curl https://sh.rustup.rs -sSf | sh -s -- -y
+      curl -s "https://get.sdkman.io" | bash
   - mode: user
     script: |
       #!/bin/bash

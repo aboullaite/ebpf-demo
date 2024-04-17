@@ -62,7 +62,7 @@ fn lb(ctx: XdpContext) -> Result<u32, u32> {
         }
     };
 
-    info!(&ctx, "Forwarding request to IP 172.17.0.{}", backend);
+    info!(&ctx, "Forwarding request to IP 10.0.4.{}", backend);
 
     if source ==  ip_address(CLIENT) {
         info!(&ctx, "Got request from client");
@@ -119,7 +119,7 @@ fn ptr_at_mut<T>(ctx: &XdpContext, offset: usize) -> Option<*mut T> {
 }
 
 fn ip_address(x: u8) -> u32 {
-    u32::from_be_bytes([172, 17, 0, x]).to_be()
+    u32::from_be_bytes([10, 0, 4, x]).to_be()
 }
 
 #[inline(always)]
