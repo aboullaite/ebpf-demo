@@ -7,7 +7,7 @@ Those are the 2 python programs in root of this directory
 
 For simplicity, especiall for users not using Linux, there is an `ubuntu.yaml` containing the config of a Linux VM machine, using [lima-vm](https://github.com/lima-vm/lima).
 
-2. Similar to 1, except that the example are built using java and [hello-bpf](https://github.com/parttimenerd/hello-ebpf). It requires Java 21 at least to be used.
+2. Introductory ebpf programs, Similar to 1, except that the example are built using java and [hello-bpf](https://github.com/parttimenerd/hello-ebpf). It requires Java 21 at least to be used.
     - `Hello.java`: A simple ebpf program  that is attached to `execve` system call, which is the syscall used to execute a program.
     - `HelloMap.java`: Similar to the prebvious program, but with a map for keeping track of each process call count.
 to run either of these programs, run them using `run.sh` script and specify the class name. 
