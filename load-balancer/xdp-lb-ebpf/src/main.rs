@@ -3,7 +3,7 @@
 
 #![allow(nonstandard_style, dead_code)]
 
-use aya_bpf::{
+use aya_ebpf::{
     bindings::xdp_action,
     macros::{map, xdp},
     maps::Array,
@@ -20,8 +20,8 @@ use network_types::{
 };
 
 // hardcoded container IP values. This assumes that IP addresses are in the form 172.17.0.x
-const CLIENT: u8 = 5;
-const LB: u8 = 4;
+const CLIENT: u8 = 18;
+const LB: u8 = 15;
 
 #[map] 
 static BACKENDS: Array<u32> = Array::<u32>::with_max_entries(10, 0);
